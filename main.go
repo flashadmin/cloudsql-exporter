@@ -6,8 +6,6 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/option"
 	"google.golang.org/api/sqladmin/v1"
 	"google.golang.org/api/storage/v1"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -33,17 +31,12 @@ func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	app.Version("cloudsql-exporter " + version.BuildVersion)
 
-	hc, err := google.DefaultClient(ctx)
+	sqlAdminSvc, err := sqladmin.NewService(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	sqlAdminSvc, err := sqladmin.NewService(ctx, option.WithHTTPClient(hc))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	storageSvc, err := storage.NewService(ctx, option.WithHTTPClient(hc))
+	storageSvc, err := storage.NewService(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
