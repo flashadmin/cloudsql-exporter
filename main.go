@@ -33,7 +33,7 @@ func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	app.Version("cloudsql-exporter " + version.BuildVersion)
 
-	hc, err := google.DefaultClient(ctx, sqladmin.SqlserviceAdminScope)
+	hc, err := google.DefaultClient(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
