@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	google.golang.org/api v0.237.0
-	gopkg.in/alecthomas/kingpin.v2 v2.2.6
+	gopkg.in/alecthomas/kingpin.v2 v2.4.0
 )
 
 require (
