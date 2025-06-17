@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/api/sqladmin/v1"
 	"google.golang.org/api/storage/v1"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/alecthomas/kingpin/v2"
 
 	"github.com/flashadmin/cloudsql-exporter/pkg/cloudsql"
 	"github.com/flashadmin/cloudsql-exporter/pkg/version"
