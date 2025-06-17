@@ -3,6 +3,10 @@ name: Lint
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   golangci:
     name: golangci‑lint
