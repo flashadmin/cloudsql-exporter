@@ -1,6 +1,6 @@
 module github.com/flashadmin/cloudsql-exporter
 
-go 1.23.0
+go 1.23
 
 require (
 	google.golang.org/api v0.170.0
