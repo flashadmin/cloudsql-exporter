@@ -8,7 +8,7 @@ RUN  --mount=type=cache,target=/go/pkg/mod \
      --mount=type=cache,target=/root/.cache/go-build \
      GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o cloudsql-exporter .
 
-FROM alpine:3.16
+FROM alpine:3.22
 RUN apk add --no-cache git ca-certificates \
     && rm -rf /var/cache/apk/* && \
     update-ca-certificates
