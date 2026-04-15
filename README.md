@@ -1,73 +1,113 @@
 # cloudsql-exporter
 
-cloudsql-exporter automatically exports CloudSQL databases in a given project to a GCS bucket.
-It supports automatic enumeration of CloudSQL instances and their databases, and can even ensure the correct IAM role bindings are in place for a successful export.
+Fork of [trufflesecurity/cloudsql-exporter](https://github.com/trufflesecurity/cloudsql-exporter).
 
-![Demo](demo.svg)
+Automatically exports CloudSQL databases in a given project to a GCS bucket.
+Supports automatic enumeration of CloudSQL instances and their databases,
+and can ensure the correct IAM role bindings are in place for a successful export.
 
-### Why
+## Why
 
-CloudSQL includes automatic backup functionality, so why might you want to use this?
-
-CloudSQL backups are tied to the CloudSQL instance. So, if the instance itself gets deleted, so do the backups.
-Similarly if the GCP project were deleted, the instance and the backups would too.
-Exporting your database to a separate Google Cloud Storage bucket, preferrably in another GCP project within another account can provide extra assurance of data retention in these scenarios. Additionally you can have much better control over data retention. It's a good supplement to the built-in backup functionality.
+CloudSQL backups are tied to the instance — if the instance or GCP project
+is deleted, the backups go with it. Exporting to a separate GCS bucket
+(preferably in another project) provides additional data retention assurance.
 
 ## Usage
 
-```bash
-$ cloudsql-exporter --help
+```
+cloudsql-exporter --help
 usage: cloudsql-backup --bucket=BUCKET --project=PROJECT [<flags>]
 
 Export Cloud SQL databases to Google Cloud Storage
 
 Flags:
-  --help                 Show context-sensitive help (also try --help-long and
-                         --help-man).
+  --help                 Show context-sensitive help
   --bucket=BUCKET        Google Cloud Storage bucket name
   --project=PROJECT      GCP project ID
-  --instance=INSTANCE    Cloud SQL instance name, if not specified all within
-                         the project will be enumerated
-  --ensure-iam-bindings  Ensure that the Cloud SQL service account has the
-                         required IAM role binding to export and validate the
-                         backup
+  --instance=INSTANCE    Cloud SQL instance name, if not specified all
+                         within the project will be enumerated
+  --compression          Enable compression for exported SQL files
+  --ensure-iam-bindings  Ensure that the Cloud SQL service account has
+                         the required IAM role binding to export
+  --version              Show application version
 ```
 
-## Installation
-### 1. Compile with Go
-
-```
-go install github.com/trufflesecurity/cloudsql-exporter
-```
-
-### 2. [Release binaries](https://github.com/trufflesecurity/cloudsql-exporter/releases)
-
-### 3. Docker
-
-> Note: Apple M1 hardware users should run with `docker run --platform linux/arm64` for better performance.
-
-#### **Most users**
+## Build
 
 ```bash
-docker run -v "$HOME/.config/gcloud/application_default_credentials.json:/gcloud.json" -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud.json trufflesecurity/cloudsql-exporter:latest --bucket my-cloudsql-backups --project my-project  --ensure-iam-bindings
+go build -o cloudsql-exporter .
 ```
 
-#### **Apple M1 users**
+## Docker
 
-The `linux/arm64` image is better to run on the M1 than the amd64 image.
-Even better is running the native darwin binary avilable, but there is not container image for that.
+Example multi-stage Dockerfile that builds from source:
+
+```dockerfile
+FROM golang:bullseye AS builder
+WORKDIR /build
+ENV CGO_ENABLED=0
+RUN git clone --branch <tag> --single-branch https://github.com/flashadmin/cloudsql-exporter.git \
+    && cd cloudsql-exporter \
+    && go build -o cloudsql-exporter .
+
+FROM gcr.io/google.com/cloudsdktool/google-cloud-cli:alpine
+COPY --from=builder /build/cloudsql-exporter/cloudsql-exporter /usr/bin/cloudsql-exporter
+COPY entrypoint.sh /opt/entrypoint.sh
+CMD ["/bin/bash", "-c", "/opt/entrypoint.sh"]
+```
+
+Example entrypoint script for exporting multiple instances:
 
 ```bash
-docker run --platform linux/arm64 -v "$HOME/.config/gcloud/application_default_credentials.json:/gcloud.json" -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud.json trufflesecurity/cloudsql-exporter:latest --bucket my-cloudsql-backups --project my-project  --ensure-iam-bindings
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=',' read -ra INSTANCES <<< "${INSTANCES}"
+for i in "${INSTANCES[@]}"; do
+  cloudsql-exporter --project="${PROJECT}" --bucket="${BUCKET}" --instance="${i}" --compression
+done
 ```
 
-### 4. Brew
+## Cloud Run Job
+
+The tool runs once and exits, making it a good fit for
+[Cloud Run Jobs](https://cloud.google.com/run/docs/create-jobs)
+triggered by [Cloud Scheduler](https://cloud.google.com/scheduler/docs).
 
 ```bash
-brew tap trufflesecurity/cloudsql-exporter
-brew install cloudsql-exporter
+# Create the job
+gcloud run jobs create cloudsql-exporter-example \
+  --image=<registry>/cloudsql-exporter:<tag> \
+  --region=europe-west4 \
+  --project=<operations-project> \
+  --service-account=<sa>@<project>.iam.gserviceaccount.com \
+  --set-env-vars="PROJECT=<target-project>,BUCKET=<backup-bucket>,INSTANCES=<instance-1>,<instance-2>" \
+  --cpu=1 \
+  --memory=512Mi \
+  --max-retries=0 \
+  --task-timeout=43200s
+
+# Schedule it (e.g. daily at 04:00 UTC)
+gcloud scheduler jobs create http cloudsql-exporter-example-scheduler \
+  --location=europe-west1 \
+  --schedule="0 4 * * *" \
+  --time-zone="UTC" \
+  --uri="https://europe-west4-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<operations-project>/jobs/cloudsql-exporter-example:run" \
+  --http-method=POST \
+  --attempt-deadline=180s \
+  --oauth-service-account-email=<sa>@<project>.iam.gserviceaccount.com
 ```
 
-## Todo (help wanted!)
+## IAM
 
-- Provide a terraform module for [running in Cloud Run on a schedule](https://cloud.google.com/run/docs/triggering/using-scheduler)
+The service account running the job needs:
+
+- `roles/cloudsql.viewer` on each target project — to list instances, databases, and trigger exports
+- `roles/run.invoker` on the operations project — to allow Cloud Scheduler to invoke the job
+
+The CloudSQL instance service accounts (format: `p<project-number>-<id>@gcp-sa-cloud-sql.iam.gserviceaccount.com`)
+need access to the GCS bucket:
+
+- `roles/storage.objectCreator` — to write export files
+- `roles/storage.objectViewer` — to validate the export
+
+Use `--ensure-iam-bindings` to grant these automatically, or pre-grant them via IAM.
