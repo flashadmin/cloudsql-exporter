@@ -8,9 +8,12 @@ and can ensure the correct IAM role bindings are in place for a successful expor
 
 ## Why
 
-CloudSQL backups are tied to the instance — if the instance or GCP project
-is deleted, the backups go with it. Exporting to a separate GCS bucket
-(preferably in another project) provides additional data retention assurance.
+~~CloudSQL backups are tied to the instance — if the instance or GCP project
+is deleted, the backups go with it.~~ CloudSQL now supports
+[retaining backups after instance deletion](https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/manage-backups-deleted-instance),
+but backups are still tied to the GCP project. Exporting to a GCS bucket
+in a separate project provides additional data retention assurance and
+better control over retention policies.
 
 ## Usage
 
