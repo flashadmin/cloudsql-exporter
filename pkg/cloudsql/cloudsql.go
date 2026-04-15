@@ -157,20 +157,23 @@ func WaitForSQLOperation(ctx context.Context, sqlAdminSvc *sqladmin.Service, tim
 		return errors.New("got nil op")
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	opName := op.Name
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.New("timeout reached")
+			return fmt.Errorf("timeout waiting for operation %s: %w", opName, ctx.Err())
 		default:
 			time.Sleep(time.Second * 10)
-			op, err := sqlAdminSvc.Operations.Get(gcpProject, op.Name).Do()
+			current, err := sqlAdminSvc.Operations.Get(gcpProject, opName).Do()
 			if err != nil {
 				return err
 			}
-			if op.Status == "DONE" {
+			if current.Status == "DONE" {
 				return nil
 			}
 		}
 	}
-
 }
