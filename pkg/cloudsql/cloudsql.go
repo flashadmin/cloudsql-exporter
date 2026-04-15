@@ -14,10 +14,6 @@ import (
 type InstanceID string
 type Databases []string
 
-func (d Databases) Items() []string {
-	return d
-}
-
 type Instances map[InstanceID]Databases
 
 // EnumerateCloudSQLDatabaseInstances enumerates Cloud SQL database instances in the given project.
@@ -73,6 +69,7 @@ func AddRoleBindingToGCSBucket(ctx context.Context, storageSvc *storage.Service,
 		return err
 	}
 
+	found := false
 	for i, binding := range policy.Bindings {
 		if binding.Role == role {
 			for _, member := range binding.Members {
@@ -81,10 +78,17 @@ func AddRoleBindingToGCSBucket(ctx context.Context, storageSvc *storage.Service,
 					return nil
 				}
 			}
-			binding.Members = append(binding.Members, svcAcctMember)
-			policy.Bindings[i] = binding
+			policy.Bindings[i].Members = append(policy.Bindings[i].Members, svcAcctMember)
+			found = true
 			break
 		}
+	}
+
+	if !found {
+		policy.Bindings = append(policy.Bindings, &storage.PolicyBindings{
+			Role:    role,
+			Members: []string{svcAcctMember},
+		})
 	}
 
 	_, err = storageSvc.Buckets.SetIamPolicy(bucketName, policy).Do()
@@ -104,9 +108,22 @@ func ListDatabasesForCloudSQLInstance(ctx context.Context, sqlAdminSvc *sqladmin
 		return nil, err
 	}
 
+	systemDatabases := map[string]bool{
+		// MySQL
+		"mysql":              true,
+		"information_schema": true,
+		"performance_schema": true,
+		"sys":                true,
+		// PostgreSQL
+		"postgres":       true,
+		"cloudsqladmin":  true,
+		"template0":      true,
+		"template1":      true,
+	}
+
 	for _, database := range list.Items {
-		if database.Name == "mysql" {
-			log.Printf("Skipping database %s", database.Name)
+		if systemDatabases[database.Name] {
+			log.Printf("Skipping system database %s", database.Name)
 			continue
 		}
 		log.Printf("Found database %s for instance %s", database.Name, instanceID)
@@ -149,20 +166,23 @@ func WaitForSQLOperation(ctx context.Context, sqlAdminSvc *sqladmin.Service, tim
 		return errors.New("got nil op")
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	opName := op.Name
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.New("timeout reached")
+			return fmt.Errorf("timeout waiting for operation %s: %w", opName, ctx.Err())
 		default:
 			time.Sleep(time.Second * 10)
-			op, err := sqlAdminSvc.Operations.Get(gcpProject, op.Name).Do()
+			current, err := sqlAdminSvc.Operations.Get(gcpProject, opName).Do()
 			if err != nil {
 				return err
 			}
-			if op.Status == "DONE" {
+			if current.Status == "DONE" {
 				return nil
 			}
 		}
 	}
-
 }

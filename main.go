@@ -28,8 +28,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kingpin.MustParse(app.Parse(os.Args[1:]))
 	app.Version("cloudsql-exporter " + version.BuildVersion)
+	kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	sqlAdminSvc, err := sqladmin.NewService(ctx)
 	if err != nil {
