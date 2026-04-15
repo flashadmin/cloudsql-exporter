@@ -112,9 +112,22 @@ func ListDatabasesForCloudSQLInstance(ctx context.Context, sqlAdminSvc *sqladmin
 		return nil, err
 	}
 
+	systemDatabases := map[string]bool{
+		// MySQL
+		"mysql":              true,
+		"information_schema": true,
+		"performance_schema": true,
+		"sys":                true,
+		// PostgreSQL
+		"postgres":       true,
+		"cloudsqladmin":  true,
+		"template0":      true,
+		"template1":      true,
+	}
+
 	for _, database := range list.Items {
-		if database.Name == "mysql" {
-			log.Printf("Skipping database %s", database.Name)
+		if systemDatabases[database.Name] {
+			log.Printf("Skipping system database %s", database.Name)
 			continue
 		}
 		log.Printf("Found database %s for instance %s", database.Name, instanceID)
