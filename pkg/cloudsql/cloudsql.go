@@ -73,6 +73,7 @@ func AddRoleBindingToGCSBucket(ctx context.Context, storageSvc *storage.Service,
 		return err
 	}
 
+	found := false
 	for i, binding := range policy.Bindings {
 		if binding.Role == role {
 			for _, member := range binding.Members {
@@ -81,10 +82,17 @@ func AddRoleBindingToGCSBucket(ctx context.Context, storageSvc *storage.Service,
 					return nil
 				}
 			}
-			binding.Members = append(binding.Members, svcAcctMember)
-			policy.Bindings[i] = binding
+			policy.Bindings[i].Members = append(policy.Bindings[i].Members, svcAcctMember)
+			found = true
 			break
 		}
+	}
+
+	if !found {
+		policy.Bindings = append(policy.Bindings, &storage.PolicyBindings{
+			Role:    role,
+			Members: []string{svcAcctMember},
+		})
 	}
 
 	_, err = storageSvc.Buckets.SetIamPolicy(bucketName, policy).Do()
