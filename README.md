@@ -46,7 +46,7 @@ go build -o cloudsql-exporter .
 Example multi-stage Dockerfile that builds from source:
 
 ```dockerfile
-FROM golang:bullseye AS builder
+FROM golang:bookworm AS builder
 WORKDIR /build
 ENV CGO_ENABLED=0
 RUN git clone --branch <tag> --single-branch https://github.com/flashadmin/cloudsql-exporter.git \
