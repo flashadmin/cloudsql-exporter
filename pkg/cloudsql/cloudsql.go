@@ -14,10 +14,6 @@ import (
 type InstanceID string
 type Databases []string
 
-func (d Databases) Items() []string {
-	return d
-}
-
 type Instances map[InstanceID]Databases
 
 // EnumerateCloudSQLDatabaseInstances enumerates Cloud SQL database instances in the given project.
