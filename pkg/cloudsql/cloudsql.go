@@ -152,7 +152,7 @@ func ExportCloudSQLDatabase(ctx context.Context, sqlAdminSvc *sqladmin.Service, 
 			return err
 		}
 
-		err = WaitForSQLOperation(ctx, sqlAdminSvc, time.Minute*10, projectID, op)
+		err = WaitForSQLOperation(ctx, sqlAdminSvc, projectID, op)
 		if err != nil {
 			return err
 		}
@@ -161,19 +161,16 @@ func ExportCloudSQLDatabase(ctx context.Context, sqlAdminSvc *sqladmin.Service, 
 	return nil
 }
 
-func WaitForSQLOperation(ctx context.Context, sqlAdminSvc *sqladmin.Service, timeout time.Duration, gcpProject string, op *sqladmin.Operation) error {
+func WaitForSQLOperation(ctx context.Context, sqlAdminSvc *sqladmin.Service, gcpProject string, op *sqladmin.Operation) error {
 	if op == nil {
 		return errors.New("got nil op")
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	opName := op.Name
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for operation %s: %w", opName, ctx.Err())
+			return fmt.Errorf("waiting for operation %s: %w", opName, ctx.Err())
 		default:
 			time.Sleep(time.Second * 10)
 			current, err := sqlAdminSvc.Operations.Get(gcpProject, opName).Do()
