@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"google.golang.org/api/sqladmin/v1"
@@ -161,25 +162,47 @@ func ExportCloudSQLDatabase(ctx context.Context, sqlAdminSvc *sqladmin.Service, 
 	return nil
 }
 
+// operationPollInterval is how often WaitForSQLOperation checks the operation status.
+var operationPollInterval = 10 * time.Second
+
+// WaitForSQLOperation polls a Cloud SQL operation until it is DONE. A DONE operation
+// can still have failed, so its errors are returned. Only ctx bounds the wait.
 func WaitForSQLOperation(ctx context.Context, sqlAdminSvc *sqladmin.Service, gcpProject string, op *sqladmin.Operation) error {
 	if op == nil {
 		return errors.New("got nil op")
 	}
 
-	opName := op.Name
 	for {
+		if op.Status == "DONE" {
+			return operationError(op)
+		}
+
+		timer := time.NewTimer(operationPollInterval)
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("waiting for operation %s: %w", opName, ctx.Err())
-		default:
-			time.Sleep(time.Second * 10)
-			current, err := sqlAdminSvc.Operations.Get(gcpProject, opName).Do()
-			if err != nil {
-				return err
-			}
-			if current.Status == "DONE" {
-				return nil
-			}
+			timer.Stop()
+			return fmt.Errorf("waiting for operation %s: %w", op.Name, ctx.Err())
+		case <-timer.C:
 		}
+
+		current, err := sqlAdminSvc.Operations.Get(gcpProject, op.Name).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("waiting for operation %s: %w", op.Name, err)
+		}
+		op = current
 	}
+}
+
+// operationError returns the errors of a finished operation, or nil if it succeeded.
+func operationError(op *sqladmin.Operation) error {
+	if op.Error == nil || len(op.Error.Errors) == 0 {
+		return nil
+	}
+
+	msgs := make([]string, 0, len(op.Error.Errors))
+	for _, e := range op.Error.Errors {
+		msgs = append(msgs, fmt.Sprintf("%s: %s", e.Code, e.Message))
+	}
+
+	return fmt.Errorf("operation %s failed: %s", op.Name, strings.Join(msgs, "; "))
 }
