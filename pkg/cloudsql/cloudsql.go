@@ -65,14 +65,16 @@ func AddRoleBindingToGCSBucket(ctx context.Context, storageSvc *storage.Service,
 
 	svcAcctMember := fmt.Sprintf("serviceAccount:%s", sqlAdminSvcAccount)
 
-	policy, err := storageSvc.Buckets.GetIamPolicy(bucketName).Do()
+	// Version 3 returns conditional bindings as they are, so SetIamPolicy writes them back unchanged.
+	policy, err := storageSvc.Buckets.GetIamPolicy(bucketName).OptionsRequestedPolicyVersion(3).Context(ctx).Do()
 	if err != nil {
 		return err
 	}
 
 	found := false
 	for i, binding := range policy.Bindings {
-		if binding.Role == role {
+		// A conditional grant does not guarantee access, so add an unconditional one.
+		if binding.Role == role && binding.Condition == nil {
 			for _, member := range binding.Members {
 				if member == svcAcctMember {
 					log.Printf("Role %s already exists for service account %s", role, sqlAdminSvcAccount)
@@ -92,7 +94,7 @@ func AddRoleBindingToGCSBucket(ctx context.Context, storageSvc *storage.Service,
 		})
 	}
 
-	_, err = storageSvc.Buckets.SetIamPolicy(bucketName, policy).Do()
+	_, err = storageSvc.Buckets.SetIamPolicy(bucketName, policy).Context(ctx).Do()
 	if err != nil {
 		return err
 	}
