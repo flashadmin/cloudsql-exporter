@@ -118,10 +118,10 @@ func ListDatabasesForCloudSQLInstance(ctx context.Context, sqlAdminSvc *sqladmin
 		"performance_schema": true,
 		"sys":                true,
 		// PostgreSQL
-		"postgres":       true,
-		"cloudsqladmin":  true,
-		"template0":      true,
-		"template1":      true,
+		"postgres":      true,
+		"cloudsqladmin": true,
+		"template0":     true,
+		"template1":     true,
 	}
 
 	for _, database := range list.Items {
